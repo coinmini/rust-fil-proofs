@@ -438,11 +438,14 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let core_group = Arc::new(checkout_core_group());
 
+    // 绑定 consumer 到main thread 核心，4个线程中的第一个；
     // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
     let _cleanup_handle = (*core_group).as_ref().map(|group| {
         // This could fail, but we will ignore the error if so.
         // It will be logged as a warning by `bind_core`.
         debug!("binding core in main thread");
+
+        //get（0）区group里面的第一个
         group.get(0).map(|core_index| bind_core(*core_index))
     });
 
