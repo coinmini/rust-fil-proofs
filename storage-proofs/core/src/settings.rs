@@ -11,6 +11,7 @@ lazy_static! {
 const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 const PREFIX: &str = "FIL_PROOFS";
 
+//这里是可以在环境变量里面设置的，有前缀  FIL_PROOFS
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -30,8 +31,11 @@ pub struct Settings {
     pub multicore_sdr_producers: usize,
     pub multicore_sdr_producer_stride: u64,
     pub multicore_sdr_lookahead: usize,
+    pub multicore_group_size: usize,
+    pub multicore_group_count: usize,
 }
 
+//下面是默认的值
 impl Default for Settings {
     fn default() -> Self {
         Settings {

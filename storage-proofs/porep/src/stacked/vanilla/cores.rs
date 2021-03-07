@@ -143,6 +143,98 @@ fn get_core_by_index<'a>(topo: &'a Topology, index: CoreIndex) -> Result<&'a Top
     }
 }
 
+// fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
+//     let topo = TOPOLOGY.lock().unwrap();
+
+
+//     let core_depth = match topo.depth_or_below_for_type(&ObjectType::Core) {
+//         Ok(depth) => depth,
+//         Err(_) => return None,
+//     };
+
+
+//     //获取多少个核心，比如3970是32个核心
+//     let all_cores = topo.objects_with_type(&ObjectType::Core).unwrap();
+//     let core_count = all_cores.len();
+
+//     let mut cache_depth = core_depth;
+//     let mut cache_count = 0;
+
+//     //获取 L3 缓存组cache_count的数量， 8 
+//     while cache_depth > 0 {
+//         let objs = topo.objects_at_depth(cache_depth);
+//         let obj_count = objs.len();
+//         if obj_count < core_count {
+//             cache_count = obj_count;
+//             break;
+//         }
+
+//         cache_depth -= 1;
+//     }
+
+//     assert_eq!(0, core_count % cache_count);
+//     //group_size = 32 / 8 /2 = 2 
+//     // group_count =  2 * 8  = 16
+//     let mut group_size = (core_count / cache_count) / 2 ;
+//     let mut group_count = 2 * cache_count;
+
+//      //默认multicore_sdr_producers = 3 ，cores_per_unit = 3 + 1 =4
+   
+
+//     if cache_count <= 1 {
+//         // If there are not more than one shared caches, there is no benefit in trying to group cores by cache.
+//         // In that case, prefer more groups so we can still bind cores and also get some parallelism.
+//         // Create as many full groups as possible. The last group may not be full.
+
+       
+//         group_count = core_count / cores_per_unit; // 32 / 4  = 8 
+//         group_size = cores_per_unit;  // 4 
+
+//         info!(
+//             "found only {} shared cache(s), heuristically grouping cores into {} groups",
+//             cache_count, group_count
+//         );
+//     } else {
+//         debug!(
+
+//             // 3970 是设置 cores_per_unit = 4 ， 就是3+1个线程跑1个任务； 32 / 4 = 8 
+//             // 把group_size 设置为2 ， cache_count 设置为 16
+
+//             // Cores: 32, Shared Caches: 8, cores per cache (group_size): 4
+//             "Cores: {}, Shared Caches: {}, cores per cache (group_size): {}",
+//             core_count, cache_count, group_size
+//         );
+//     }
+
+//     // 定义好core_groups ，是 0到group_count 到总数
+//     // 这里就是绑定核心到真正地方了，core_index
+
+//     //(1..20).map(|x| x+1); 是指迭代器的所有元素 自加1
+//     // （0..8）.map(|i|   {0..4}.map(|j| {实际运算}))，  类似for循环嵌套
+//     let core_groups = (0..group_count)
+//         .map(|i| {
+//             (0..group_size)
+//                 .map(|j| {
+//                     //获取线程核心序号进行绑定
+//                     let core_index = i * group_size + j;
+//                     assert!(core_index < core_count);
+
+//                     // 这个CoreInde给上面到bind_core 方法里面用
+//                     CoreIndex(core_index)
+//                 })
+//                 .collect::<Vec<_>>()
+//         })
+//         .collect::<Vec<_>>();
+
+//     Some(
+//         core_groups
+//             .iter()
+//             .map(|group| Mutex::new(group.clone()))
+//             .collect::<Vec<_>>(),
+//     )
+// }
+
+
 fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
     let topo = TOPOLOGY.lock().unwrap();
 
@@ -173,48 +265,35 @@ fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
     }
 
     assert_eq!(0, core_count % cache_count);
-    //group_size = 32 / 8 /2 = 2 
-    // group_count =  2 * 8  = 16
-    let mut group_size = (core_count / cache_count) / 2 ;
-    let mut group_count = 2 * cache_count;
+  
+    let settings = &settings::SETTINGS;
+    //默认multicore_sdr_producers = 3 ，cores_per_unit = 3 + 1 =4
+    // num_group_size 可以设置为2，num_group_count 设置为16
+    let num_group_size = settings.multicore_group_size;
+    let num_group_count = settings.multicore_group_count;
 
+    
+    debug!(
 
-    if cache_count <= 1 {
-        // If there are not more than one shared caches, there is no benefit in trying to group cores by cache.
-        // In that case, prefer more groups so we can still bind cores and also get some parallelism.
-        // Create as many full groups as possible. The last group may not be full.
+        // 3970 是设置 cores_per_unit = 4 ， 就是3+1个线程跑1个任务； 32 / 4 = 8 
+        // 把group_size 设置为2 ， cache_count 设置为 16
 
-       
-        group_count = core_count / cores_per_unit; // 32 / 4  = 8 
-        group_size = cores_per_unit;  // 4 
-
-        info!(
-            "found only {} shared cache(s), heuristically grouping cores into {} groups",
-            cache_count, group_count
-        );
-    } else {
-        debug!(
-
-            // 3970 是设置 cores_per_unit = 4 ， 就是3+1个线程跑1个任务； 32 / 4 = 8 
-            // 把group_size 设置为2 ， cache_count 设置为 16
-
-            // Cores: 32, Shared Caches: 8, cores per cache (group_size): 4
-            "Cores: {}, Shared Caches: {}, cores per cache (group_size): {}",
-            core_count, cache_count, group_size
-        );
-    }
-
+        // Cores: 32, Shared Caches: 8, cores per cache (group_size): 4
+        "Cores: {}, Shared Caches: {}, cores per cache (group_size): {}",
+        core_count, cache_count, num_group_size
+    );
+ 
     // 定义好core_groups ，是 0到group_count 到总数
     // 这里就是绑定核心到真正地方了，core_index
 
     //(1..20).map(|x| x+1); 是指迭代器的所有元素 自加1
     // （0..8）.map(|i|   {0..4}.map(|j| {实际运算}))，  类似for循环嵌套
-    let core_groups = (0..group_count)
+    let core_groups = (0..num_group_count)
         .map(|i| {
-            (0..group_size)
+            (0..num_group_size)
                 .map(|j| {
                     //获取线程核心序号进行绑定
-                    let core_index = i * group_size + j;
+                    let core_index = i * num_group_size + j;
                     assert!(core_index < core_count);
 
                     // 这个CoreInde给上面到bind_core 方法里面用
