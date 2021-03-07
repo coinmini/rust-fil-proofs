@@ -58,6 +58,9 @@ impl Default for Settings {
             multicore_sdr_producers: 3,
             multicore_sdr_producer_stride: 128,
             multicore_sdr_lookahead: 800,
+            multicore_group_size: 4,
+            multicore_group_count: 8,
+
         }
     }
 }
